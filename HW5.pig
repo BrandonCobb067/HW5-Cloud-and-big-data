@@ -59,3 +59,147 @@ top_marketplaces = FOREACH share_groups {
 part1_3 = ORDER top_marketplaces BY category ASC, review_count DESC, marketplace ASC;
 DUMP part1_3;
 STORE part1_3 INTO '$OUTPUT/part1_3' USING PigStorage('\t');
+
+
+-- Part 2
+
+-- Part 2 - Problem 1
+date_groups = GROUP reviews BY review_date;
+date_totals = FOREACH date_groups GENERATE group AS review_date, 
+    COUNT(reviews.review_id) AS total_reviews;
+DUMP date_totals;
+STORE date_totals INTO '$OUTPUT/part2_1' USING PigStorage('\t');
+
+
+-- Part 2 - Problem 2
+votes_filtered = FILTER reviews BY total_votes > 0;
+product_groups = GROUP votes_filtered BY product_id;
+product_averages = FOREACH product_groups GENERATE group AS product_id, 
+    AVG(votes_filtered.helpful_votes) AS avg_helpful, 
+    AVG(votes_filtered.total_votes) AS avg_total;
+    
+product_ratios = FOREACH product_averages GENERATE product_id, 
+    avg_helpful, 
+    avg_total, 
+    (double)avg_helpful / (double)avg_total AS helpfulness_ratio;
+
+sorted_ratios = ORDER product_ratios BY helpfulness_ratio DESC;
+part2_2_result = LIMIT sorted_ratios 50;
+DUMP part2_2_result;
+STORE part2_2_result INTO '$OUTPUT/part2_2' USING PigStorage('\t');
+
+
+-- Part 2 - Problem 3
+-- Extract the month (YYYY-MM) from review_date
+reviews_with_month = FOREACH reviews GENERATE product_id, star_rating, 
+    SUBSTRING(review_date, 0, 7) AS month;
+
+month_prod_groups = GROUP reviews_with_month BY (month, product_id);
+month_prod_stats = FOREACH month_prod_groups GENERATE group.month AS month, 
+    group.product_id AS product_id, 
+    COUNT(reviews_with_month) AS review_count, 
+    AVG(reviews_with_month.star_rating) AS avg_rating;
+
+-- Only include if they have at least 50 reviews in that month
+qualified_month_stats = FILTER month_prod_stats BY review_count >= 50;
+month_groups = GROUP qualified_month_stats BY month;
+
+top_5_per_month = FOREACH month_groups {
+    -- Sort within each month by average star rating in descending order
+    sorted_month = ORDER qualified_month_stats BY avg_rating DESC;
+    top_5 = LIMIT sorted_month 5;
+    GENERATE FLATTEN(top_5);
+};
+
+-- Ensure global ordering is clean for output
+part2_3_result = ORDER top_5_per_month BY month ASC, avg_rating DESC;
+DUMP part2_3_result;
+STORE part2_3_result INTO '$OUTPUT/part2_3' USING PigStorage('\t');
+
+
+-- Part 3
+
+-- Filter records for verified purchases only
+verified_reviews = FILTER reviews BY verified_purchase == 'Y';
+
+-- Part 3 - Problem 1
+cat_groups = GROUP verified_reviews BY product_category;
+cat_stats = FOREACH cat_groups {
+    dist_prods = DISTINCT verified_reviews.product_id;
+    GENERATE group AS product_category, 
+        COUNT(verified_reviews.product_id) AS total_rows, 
+        COUNT(dist_prods) AS distinct_prods;
+};
+DUMP cat_stats;
+STORE cat_stats INTO '$OUTPUT/part3_1' USING PigStorage('\t');
+
+
+-- Part 3 - Problem 2
+star_groups = GROUP verified_reviews BY star_rating;
+star_sums = FOREACH star_groups GENERATE group AS star_rating, 
+    SUM(verified_reviews.helpful_votes) AS sum_helpful, 
+    SUM(verified_reviews.total_votes) AS sum_total;
+
+-- Filter out zero denominators before division
+star_filtered = FILTER star_sums BY sum_total > 0;
+star_ratios = FOREACH star_filtered GENERATE star_rating, 
+    sum_helpful, 
+    sum_total, 
+    (double)sum_helpful / (double)sum_total AS avg_votes;
+
+part3_2_result = ORDER star_ratios BY avg_votes DESC;
+DUMP part3_2_result;
+STORE part3_2_result INTO '$OUTPUT/part3_2' USING PigStorage('\t');
+
+
+-- Part 3 - Problem 3
+-- Calculate category helpfulness rate
+cat_help_groups = GROUP verified_reviews BY product_category;
+cat_help_sums = FOREACH cat_help_groups GENERATE group AS category, 
+    SUM(verified_reviews.helpful_votes) AS sum_helpful_cat, 
+    SUM(verified_reviews.total_votes) AS sum_total_cat;
+
+cat_help_filtered = FILTER cat_help_sums BY sum_total_cat > 0;
+cat_rates = FOREACH cat_help_filtered GENERATE category, 
+    (double)sum_helpful_cat / (double)sum_total_cat AS cat_help_rate;
+
+-- Calculate product helpfulness rate (min 50 verified reviews)
+prod_cat_groups = GROUP verified_reviews BY (product_category, product_id);
+prod_stats = FOREACH prod_cat_groups GENERATE group.product_category AS category, 
+    group.product_id AS product_id, 
+    COUNT(verified_reviews) AS review_count, 
+    SUM(verified_reviews.helpful_votes) AS sum_helpful_prod, 
+    SUM(verified_reviews.total_votes) AS sum_total_prod;
+
+prod_filtered = FILTER prod_stats BY review_count >= 50 AND sum_total_prod > 0;
+prod_rates = FOREACH prod_filtered GENERATE category, 
+    product_id, 
+    review_count, 
+    (double)sum_helpful_prod / (double)sum_total_prod AS prod_help_rate;
+
+-- Join category rates and product rates
+joined_rates = JOIN prod_rates BY category, cat_rates BY category;
+
+-- Filter where product rate exceeds category rate by >= 10 percentage points (0.10)
+excess_filtered = FILTER joined_rates BY prod_rates::prod_help_rate >= (cat_rates::cat_help_rate + 0.10);
+
+final_format = FOREACH excess_filtered GENERATE 
+    prod_rates::category AS category, 
+    prod_rates::product_id AS product_id, 
+    prod_rates::prod_help_rate AS helpfulness_rate, 
+    prod_rates::review_count AS review_count, 
+    cat_rates::cat_help_rate AS cat_help_rate, 
+    (prod_rates::prod_help_rate - cat_rates::cat_help_rate) AS excess;
+
+final_groups = GROUP final_format BY category;
+
+top_3_excess_per_cat = FOREACH final_groups {
+    -- Sort by excess helpfulness in descending order within each category
+    sorted_excess = ORDER final_format BY excess DESC;
+    top_3 = LIMIT sorted_excess 3;
+    GENERATE FLATTEN(top_3);
+};
+
+part3_3_result = ORDER top_3_excess_per_cat BY category ASC, excess DESC;
+DUMP part3_3_result;
+STORE part3_3_result INTO '$OUTPUT/part3_3' USING PigStorage('\t');
