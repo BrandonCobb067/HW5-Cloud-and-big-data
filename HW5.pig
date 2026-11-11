@@ -1,9 +1,9 @@
--- HW5 - Part 1
+-- HW5 - Parts 1, 2, and 3
 SET pig.print.header true;
 
 -- Pass -param INPUT=/path/to/amazon_reviews_us_Camera_v1_00.tsv
 %default INPUT 'amazon_reviews_us_Camera_v1_00.tsv'
-%default OUTPUT 'hw5_part1_results'
+%default OUTPUT 'hw5_results'
 
 raw = LOAD '$INPUT' USING PigStorage('\t') AS (
   marketplace:chararray, customer_id:chararray, review_id:chararray,
@@ -12,7 +12,7 @@ raw = LOAD '$INPUT' USING PigStorage('\t') AS (
   total_votes:long, vine:chararray, verified_purchase:chararray,
   review_headline:chararray, review_body:chararray, review_date:chararray
 );
--- Remove the header and check the fields used in Part 1.
+-- Remove the header and check the required review fields.
 reviews = FILTER raw BY marketplace IS NOT NULL AND marketplace != 'marketplace'
   AND review_id IS NOT NULL AND product_category IS NOT NULL
   AND star_rating >= 1 AND star_rating <= 5;
@@ -90,17 +90,18 @@ STORE date_totals INTO '$OUTPUT/part2_1' USING PigStorage('\t');
 
 
 -- Part 2 - Problem 2
--- Filter out nulls and ensure total_votes > 0
-votes_filtered = FILTER reviews BY product_id IS NOT NULL 
-                               AND total_votes > 0;
-
+-- Average helpful votes over all reviews; total votes only where positive.
+votes_filtered = FILTER reviews BY product_id IS NOT NULL;
 product_groups = GROUP votes_filtered BY product_id;
 
-product_averages = FOREACH product_groups GENERATE 
-    group AS product_id, 
-    AVG(votes_filtered.helpful_votes) AS avg_helpful, 
-    AVG(votes_filtered.total_votes) AS avg_total;
-    
+product_averages = FOREACH product_groups {
+    positive_votes = FILTER votes_filtered BY total_votes > 0;
+    GENERATE group AS product_id,
+        AVG(votes_filtered.helpful_votes) AS avg_helpful,
+        AVG(positive_votes.total_votes) AS avg_total;
+};
+product_averages = FILTER product_averages BY avg_total > 0;
+
 product_ratios = FOREACH product_averages GENERATE 
     product_id, 
     avg_helpful, 
@@ -109,11 +110,12 @@ product_ratios = FOREACH product_averages GENERATE
 
 -- Use GROUP ALL and TOP to avoid the memory crash of a global ORDER BY
 all_ratios = GROUP product_ratios ALL;
-part2_2_result = FOREACH all_ratios {
+part2_2_top = FOREACH all_ratios {
     -- TOP(N, column_index, bag). Index 3 refers to helpfulness_ratio (0-indexed).
     top_items = TOP(50, 3, product_ratios);
     GENERATE FLATTEN(top_items);
 };
+part2_2_result = ORDER part2_2_top BY $3 DESC, $0 ASC;
 
 sh echo "========================================";
 sh echo "         PART 2 - PROBLEM 2             ";

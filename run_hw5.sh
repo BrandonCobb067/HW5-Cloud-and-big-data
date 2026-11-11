@@ -10,6 +10,6 @@ case "$MODE" in local|mapreduce) ;; *) echo "Choose local or mapreduce" >&2; exi
 if [[ "$MODE" == local ]]; then INPUT="$(realpath "$INPUT")"; fi
 cd "$(dirname "$0")"
 mkdir -p outputs
-OUTPUT="${3:-hw5_part1_results_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT="${3:-hw5_results_$(date +%Y%m%d_%H%M%S)}"
 pig -x "$MODE" -param "INPUT=$INPUT" -param "OUTPUT=$OUTPUT" -f HW5.pig > outputs/HW5Dump.txt 2> outputs/HW5Errors.txt
-echo "Part 1 DUMP results: outputs/HW5Dump.txt. Stored tables: $OUTPUT"
+echo "Parts 1, 2, and 3 DUMP results: outputs/HW5Dump.txt. Stored tables: $OUTPUT"
