@@ -1,0 +1,22 @@
+Part 1: Data Loading and Basic Grouping
+Problem 1: The raw dataset was loaded and filtered to remove nulls, headers, and invalid ratings. The data was then grouped by marketplace and product category to calculate the total number of reviews and the average star rating.
+
+Problem 2: The reviews were filtered to exclude the 'US' marketplace. Categories were grouped to identify those with at least 1,000 reviews. This list was joined with marketplace-category pairs to filter and sort the final aggregates by total reviews in descending order.
+
+Problem 3: The pairs from Problem 1 were grouped by category to calculate the total reviews per category. This was joined back to the pairs to calculate percentage shares. A nested FOREACH block was used to rank marketplaces and output the top 3 per category.
+
+
+Part 2: Time-Based Summaries
+Problem 1: The cleaned dataset was grouped by review date. The total number of review IDs per date was then counted.
+
+Problem 2: Records were filtered to ensure total votes were greater than zero to prevent division errors. Data was grouped by product ID to calculate average helpful and total votes, compute the helpfulness ratio, and output the first 50 rows.
+
+Problem 3: The SUBSTRING function was used to extract the YYYY-MM formatted month. The data was grouped by month and product ID to calculate review counts and average ratings. Records were filtered for products with at least 50 reviews, and a nested FOREACH isolated the top 5 products per month by average rating.
+
+
+Part 3: Verified Purchase Analysis
+Problem 1: The dataset was filtered exclusively for records where verified purchase equals 'Y'. The data was grouped by product category to report the total rows and the number of distinct product IDs using the DISTINCT keyword.
+
+Problem 2: Verified purchases were grouped by star rating to sum the helpful and total votes. Zero total votes were filtered out before division, the average votes ratio was computed, and results were ordered in descending order.
+
+Problem 3: The baseline category helpfulness rate was computed by summing helpful and total votes per category. The helpfulness rate per product ID was calculated and filtered for items with at least 50 verified reviews. These datasets were joined to filter for products exceeding the category rate by at least 10 percentage points. A nested FOREACH was used to sort by excess helpfulness and extract the top 3 product IDs per category

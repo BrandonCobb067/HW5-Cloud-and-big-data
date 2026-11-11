@@ -1,4 +1,6 @@
 -- HW5 - Part 1
+SET pig.print.header true;
+
 -- Pass -param INPUT=/path/to/amazon_reviews_us_Camera_v1_00.tsv
 %default INPUT 'amazon_reviews_us_Camera_v1_00.tsv'
 %default OUTPUT 'hw5_part1_results'
@@ -21,6 +23,10 @@ pairs = FOREACH pairs_grouped GENERATE group.marketplace AS marketplace,
   group.product_category AS category, COUNT(reviews.review_id) AS review_count,
   AVG(reviews.star_rating) AS average_rating;
 part1_1 = ORDER pairs BY marketplace ASC, category ASC;
+
+sh echo "========================================";
+sh echo "         PART 1 - PROBLEM 1             ";
+sh echo "========================================";
 DUMP part1_1;
 STORE part1_1 INTO '$OUTPUT/part1_1' USING PigStorage('\t');
 
@@ -39,6 +45,10 @@ qualified_pairs = FOREACH qualified GENERATE non_us_pairs::marketplace AS market
   non_us_pairs::category AS category, non_us_pairs::review_count AS review_count,
   non_us_pairs::average_rating AS average_rating;
 part1_2 = ORDER qualified_pairs BY review_count DESC, category ASC, marketplace ASC;
+
+sh echo "========================================";
+sh echo "         PART 1 - PROBLEM 2             ";
+sh echo "========================================";
 DUMP part1_2;
 STORE part1_2 INTO '$OUTPUT/part1_2' USING PigStorage('\t');
 
@@ -57,6 +67,10 @@ top_marketplaces = FOREACH share_groups {
   GENERATE FLATTEN(top_three);
 };
 part1_3 = ORDER top_marketplaces BY category ASC, review_count DESC, marketplace ASC;
+
+sh echo "========================================";
+sh echo "         PART 1 - PROBLEM 3             ";
+sh echo "========================================";
 DUMP part1_3;
 STORE part1_3 INTO '$OUTPUT/part1_3' USING PigStorage('\t');
 
@@ -67,27 +81,45 @@ STORE part1_3 INTO '$OUTPUT/part1_3' USING PigStorage('\t');
 date_groups = GROUP reviews BY review_date;
 date_totals = FOREACH date_groups GENERATE group AS review_date, 
     COUNT(reviews.review_id) AS total_reviews;
+
+sh echo "========================================";
+sh echo "         PART 2 - PROBLEM 1             ";
+sh echo "========================================";
 DUMP date_totals;
 STORE date_totals INTO '$OUTPUT/part2_1' USING PigStorage('\t');
 
 
 -- Part 2 - Problem 2
-votes_filtered = FILTER reviews BY total_votes > 0;
+-- Filter out nulls and ensure total_votes > 0
+votes_filtered = FILTER reviews BY product_id IS NOT NULL 
+                               AND total_votes > 0;
+
 product_groups = GROUP votes_filtered BY product_id;
-product_averages = FOREACH product_groups GENERATE group AS product_id, 
+
+product_averages = FOREACH product_groups GENERATE 
+    group AS product_id, 
     AVG(votes_filtered.helpful_votes) AS avg_helpful, 
     AVG(votes_filtered.total_votes) AS avg_total;
     
-product_ratios = FOREACH product_averages GENERATE product_id, 
+product_ratios = FOREACH product_averages GENERATE 
+    product_id, 
     avg_helpful, 
     avg_total, 
-    (double)avg_helpful / (double)avg_total AS helpfulness_ratio;
+    ((double)avg_helpful / (double)avg_total) AS helpfulness_ratio;
 
-sorted_ratios = ORDER product_ratios BY helpfulness_ratio DESC;
-part2_2_result = LIMIT sorted_ratios 50;
+-- Use GROUP ALL and TOP to avoid the memory crash of a global ORDER BY
+all_ratios = GROUP product_ratios ALL;
+part2_2_result = FOREACH all_ratios {
+    -- TOP(N, column_index, bag). Index 3 refers to helpfulness_ratio (0-indexed).
+    top_items = TOP(50, 3, product_ratios);
+    GENERATE FLATTEN(top_items);
+};
+
+sh echo "========================================";
+sh echo "         PART 2 - PROBLEM 2             ";
+sh echo "========================================";
 DUMP part2_2_result;
 STORE part2_2_result INTO '$OUTPUT/part2_2' USING PigStorage('\t');
-
 
 -- Part 2 - Problem 3
 -- Extract the month (YYYY-MM) from review_date
@@ -113,6 +145,10 @@ top_5_per_month = FOREACH month_groups {
 
 -- Ensure global ordering is clean for output
 part2_3_result = ORDER top_5_per_month BY month ASC, avg_rating DESC;
+
+sh echo "========================================";
+sh echo "         PART 2 - PROBLEM 3             ";
+sh echo "========================================";
 DUMP part2_3_result;
 STORE part2_3_result INTO '$OUTPUT/part2_3' USING PigStorage('\t');
 
@@ -130,6 +166,10 @@ cat_stats = FOREACH cat_groups {
         COUNT(verified_reviews.product_id) AS total_rows, 
         COUNT(dist_prods) AS distinct_prods;
 };
+
+sh echo "========================================";
+sh echo "         PART 3 - PROBLEM 1             ";
+sh echo "========================================";
 DUMP cat_stats;
 STORE cat_stats INTO '$OUTPUT/part3_1' USING PigStorage('\t');
 
@@ -148,6 +188,10 @@ star_ratios = FOREACH star_filtered GENERATE star_rating,
     (double)sum_helpful / (double)sum_total AS avg_votes;
 
 part3_2_result = ORDER star_ratios BY avg_votes DESC;
+
+sh echo "========================================";
+sh echo "         PART 3 - PROBLEM 2             ";
+sh echo "========================================";
 DUMP part3_2_result;
 STORE part3_2_result INTO '$OUTPUT/part3_2' USING PigStorage('\t');
 
@@ -201,5 +245,9 @@ top_3_excess_per_cat = FOREACH final_groups {
 };
 
 part3_3_result = ORDER top_3_excess_per_cat BY category ASC, excess DESC;
+
+sh echo "========================================";
+sh echo "         PART 3 - PROBLEM 3             ";
+sh echo "========================================";
 DUMP part3_3_result;
 STORE part3_3_result INTO '$OUTPUT/part3_3' USING PigStorage('\t');
